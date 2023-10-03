@@ -1,8 +1,12 @@
 export enum HOXStatusCode {
+  Continue = 100,
   OK = 200,
+  Created = 201,
   BadRequest = 400,
   Unauthorized = 401,
+  Forbidden = 403,
   NotFound = 404,
+  NoPong = 420,
 }
 
 export class HOXResponse {

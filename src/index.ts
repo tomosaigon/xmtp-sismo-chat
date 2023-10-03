@@ -34,9 +34,22 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
 
     console.log(`Incoming message`, message.content, 'from', message.senderAddress);
     const senderAddress = message.senderAddress;
+    const profile = await getProfileByXmtp(senderAddress);
+    if (message.content === 'GET /ping') {
+        if (!profile) {
+            await message.conversation.send(new HOXResponse(HOXStatusCode.Unauthorized));
+            return true;
+        }
+        if (connections.get(senderAddress) === true) {
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'PONG'));
+        } else {
+            await message.conversation.send(new HOXResponse(HOXStatusCode.NoPong));
+        }
+        return true;
+    }
 
     if (connections.get(senderAddress) === true) {
-        if (message.content === '/close') {
+        if (message.content === 'DELETE .' || message.content === '/close') {
             connections.set(senderAddress, false);
             convos.delete(senderAddress);
             await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Connection closed'));
@@ -45,7 +58,7 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
         for (const [address, connected] of connections) {
             if (connected === true) {
                 if (address !== senderAddress || COPY_SENDER) {
-                    await convos.get(address)?.send(`[${senderAddress}] ${message.content}`);
+                    await convos.get(address)?.send(`<${senderAddress}> ${message.content}`);
                 }
             }
         }
@@ -60,7 +73,6 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
         await message.conversation.send(new HOXResponse(HOXStatusCode.BadRequest));
         return true;
     }
-    const profile = await getProfileByXmtp(senderAddress);
     console.log('hoxreq.method ===', hoxreq.method);
     console.log('hoxreq.path ===', hoxreq.path);
     if (hoxreq.method === 'CONNECT') {
@@ -140,7 +152,7 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             }
             try {
                 await createPost(profile.nickname, profile.user_id, hoxreq.body);
-                await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Post created successfully'));
+                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Post created successfully'));
             } catch (error) {
                 await message.conversation.send(new HOXResponse(HOXStatusCode.BadRequest, 'Failed to create a new post'));
             }
@@ -148,7 +160,7 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             profile.nickname = JSON.parse(hoxreq.body).nickname;
             try {
                 await updateProfile(profile);
-                await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Profile updated successfully'));
+                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Profile updated successfully'));
             } catch (error) {
                 await message.conversation.send(new HOXResponse(HOXStatusCode.BadRequest, 'Failed to update the profile'));
             }
