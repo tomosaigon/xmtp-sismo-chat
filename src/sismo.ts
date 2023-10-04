@@ -2,7 +2,10 @@ import { SismoConnect, SismoConnectConfig, SismoConnectResponse, SismoConnectVer
     
 // you will need to register an appId in the Factory
 const SISMO_CONNECT_APP_ID = "0x2cc3a0560a713f648168c37919b5e7c8";
-const GROUP_ID = "0x3b8e71562df9eca2edc0a94d18545257"
+// const GROUP_ID = "0x3b8e71562df9eca2edc0a94d18545257"
+// Data Group of SisterMothers
+const GROUP_ID = "0x5f52cf60d2daf39e7faf41a3b86673b9";
+const MESSAGE = "I wanna chat with my SisterMothers";
 
 // const config: SismoConnectConfig = {
 //     appId: SISMO_CONNECT_APP_ID,
@@ -43,7 +46,7 @@ export async function verify(sismoResponse: SismoConnectResponse) {
             // with respect to a specific group membership
             // here the group with id 0x3b8e71562df9eca2edc0a94d18545257
             claims: [{ groupId: GROUP_ID }],
-            signature: { message: "I wanna chat with other USDC/ETH LPers" }
+            signature: { message: MESSAGE }
         }
     )
     return result;
