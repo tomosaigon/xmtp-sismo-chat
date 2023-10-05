@@ -23,6 +23,9 @@ if (process.env.PRC_XMTP_KEY !== undefined) {
 async function handleCommand(ctx: IContext, line: string) {
     if (line === '/exit') {
         return false;
+    } else if (line === '/debug') {
+        console.log(await getProfiles());
+        console.log(await getPosts());
     }
     console.log('Invalid command.');
     return true;
@@ -60,9 +63,12 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
                 await message.conversation.send(new HOXResponse(HOXStatusCode.OK, topic));
             } else {
                 topic = message.content.split('\n')[0].replace(/^\/topic /, '');
-                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Set topic: ' + topic)); 
+                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Set topic: ' + topic));
             }
             return true;
+        } else if (message.content === '/names') {
+            const names = (await getProfiles()).map((profile) => profile.nickname);
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, names.join('\n')));
         }
         for (const [address, connected] of connections) {
             if (connected === true) {
@@ -115,6 +121,9 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             }
         } else if (hoxreq.path === '/topic') {
             await message.conversation.send(new HOXResponse(HOXStatusCode.OK, topic));
+        } else if (hoxreq.path === '/names') {
+            const names = (await getProfiles()).map((profile) => profile.nickname);
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, names.join('\n')));
         } else if (hoxreq.path === '/debug') {
             console.log(await getProfiles());
             console.log(await getPosts());
