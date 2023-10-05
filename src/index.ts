@@ -11,6 +11,7 @@ const COPY_SENDER = true;
 const connections = new Map<string, boolean>();
 // XXX can't pickle-store in db
 const convos = new Map<string, Conversation>();
+let topic = 'Set a topic with /topic <topic>';
 
 if (process.env.PRC_XMTP_ENV !== undefined) {
     botConfig.env = process.env.PRC_XMTP_ENV as typeof botConfig.env;
@@ -35,7 +36,7 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
     console.log(`Incoming message`, message.content, 'from', message.senderAddress);
     const senderAddress = message.senderAddress;
     const profile = await getProfileByXmtp(senderAddress);
-    if (message.content === 'GET /ping') {
+    if (message.content === 'GET /ping' || (message.content === '/ping' && connections.get(senderAddress) === true)) {
         if (!profile) {
             await message.conversation.send(new HOXResponse(HOXStatusCode.Unauthorized));
             return true;
@@ -53,6 +54,14 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             connections.set(senderAddress, false);
             convos.delete(senderAddress);
             await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Connection closed'));
+            return true;
+        } else if (message.content.split(' ')[0] === '/topic') {
+            if (message.content.split(' ').length == 1) {
+                await message.conversation.send(new HOXResponse(HOXStatusCode.OK, topic));
+            } else {
+                topic = message.content.split('\n')[0].replace(/^\/topic /, '');
+                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Set topic: ' + topic)); 
+            }
             return true;
         }
         for (const [address, connected] of connections) {
@@ -104,6 +113,8 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             } else {
                 await message.conversation.send(new HOXResponse(HOXStatusCode.BadRequest, 'nickname is missing'));
             }
+        } else if (hoxreq.path === '/topic') {
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, topic));
         } else if (hoxreq.path === '/debug') {
             console.log(await getProfiles());
             console.log(await getPosts());
@@ -164,11 +175,13 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             } catch (error) {
                 await message.conversation.send(new HOXResponse(HOXStatusCode.BadRequest, 'Failed to update the profile'));
             }
+        } else if (hoxreq.path === '/topic') {
+            topic = hoxreq.body.split('\n')[0];
+            await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Set topic: ' + topic));
         } else {
             await message.conversation.send(new HOXResponse(HOXStatusCode.NotFound));
         }
     }
-
 
     return true;
 }
