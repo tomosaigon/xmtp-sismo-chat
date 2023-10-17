@@ -1,5 +1,5 @@
 default.db
-src/apiKeys.js
+src/apiKeys.ts
 
 # Logs
 logs
