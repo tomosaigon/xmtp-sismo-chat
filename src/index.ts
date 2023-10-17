@@ -3,6 +3,7 @@
 import { botConfig, XmtpBot, IContext } from "xmtp-bot-cli";
 import { DecodedMessage, Conversation } from "@xmtp/xmtp-js";
 import { verify } from "./sismo";
+import { discoCheck } from "./disco";
 import { getPosts, createPost, getProfiles, createProfile, updateProfile, getProfileBynickname, getProfileByXmtp } from "./db";
 import { HOXStatusCode, HOXResponse, HOXRequest, parseHOXRequest } from "./hox";
 import { SismoConnectResponse } from "@sismo-core/sismo-connect-server";
@@ -20,8 +21,18 @@ if (process.env.PRC_XMTP_KEY !== undefined) {
     botConfig.key = process.env.PRC_XMTP_KEY as typeof botConfig.key;
 }
 
+async function broadcast(msg: string, senderAddress: string) {
+    for (const [address, connected] of connections) {
+        if (connected === true) {
+            if (address !== senderAddress || COPY_SENDER) {
+                await convos.get(address)?.send(msg);
+            }
+        }
+    }
+}
 async function handleCommand(ctx: IContext, line: string) {
     if (line === '/exit') {
+        await broadcast('Server is shutting down.', '');
         return false;
     } else if (line === '/debug') {
         console.log(await getProfiles());
@@ -57,26 +68,20 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             connections.set(senderAddress, false);
             convos.delete(senderAddress);
             await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Connection closed'));
-            return true;
         } else if (message.content.split(' ')[0] === '/topic') {
             if (message.content.split(' ').length == 1) {
-                await message.conversation.send(new HOXResponse(HOXStatusCode.OK, topic));
+                await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Topic: ' + topic));
             } else {
                 topic = message.content.split('\n')[0].replace(/^\/topic /, '');
-                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Set topic: ' + topic));
+                await message.conversation.send(new HOXResponse(HOXStatusCode.Created, 'Topic: ' + topic));
             }
-            return true;
         } else if (message.content === '/names') {
             const names = (await getProfiles()).map((profile) => profile.nickname);
-            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, names.join('\n')));
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Names: ' + names.join(' ')));
+        } else {
+            await broadcast(`<${profile.nickname}> ${message.content}`, senderAddress);
         }
-        for (const [address, connected] of connections) {
-            if (connected === true) {
-                if (address !== senderAddress || COPY_SENDER) {
-                    await convos.get(address)?.send(`<${senderAddress}> ${message.content}`);
-                }
-            }
-        }
+
         return true;
     }
 
@@ -120,10 +125,10 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
                 await message.conversation.send(new HOXResponse(HOXStatusCode.BadRequest, 'nickname is missing'));
             }
         } else if (hoxreq.path === '/topic') {
-            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, topic));
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Topic: ' + topic));
         } else if (hoxreq.path === '/names') {
             const names = (await getProfiles()).map((profile) => profile.nickname);
-            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, names.join('\n')));
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Names: ' + names.join(' ')));
         } else if (hoxreq.path === '/debug') {
             console.log(await getProfiles());
             console.log(await getPosts());
@@ -131,6 +136,28 @@ async function handleMessage(ctx: IContext, message: DecodedMessage) {
             await message.conversation.send(new HOXResponse(HOXStatusCode.NotFound));
         }
     } else if (hoxreq.method === 'POST') {
+        if (hoxreq.path === '/auth' && hoxreq.parameters.disco) {
+            const encodedId = hoxreq.parameters.vcid;
+            const discoUser = await discoCheck(encodedId);
+            if (!discoUser) {
+                await message.conversation.send(new HOXResponse(HOXStatusCode.Unauthorized, 'Authentication failed'));
+                return true;
+            }
+            if (profile) {
+                if (profile.user_id !== discoUser.id) {
+                    throw new Error('User ID mismatch');
+                }
+            } else {
+                const nickname = discoUser.memberId || '';
+                if (nickname === '') {
+                    throw new Error('nickname is missing');
+                }
+                await createProfile(nickname, discoUser.id, senderAddress);
+            }
+            // await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Disco!'));
+            await message.conversation.send(new HOXResponse(HOXStatusCode.OK, 'Authentication successful'));
+            return true;
+        }
         if (hoxreq.path === '/auth') {
             const sismoResponse: SismoConnectResponse = JSON.parse(hoxreq.body);
             try {
